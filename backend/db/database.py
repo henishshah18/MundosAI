@@ -4,7 +4,7 @@ from functools import lru_cache
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
-from app.core.config import settings
+from backend.core.config import settings
 
 
 @lru_cache(maxsize=1)

@@ -9,9 +9,10 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { SlotBookingCalendar } from './slot-booking-calendar'
-import { addAppointment } from '@/lib/slices/appointmentSlice'
 import { toast } from 'sonner'
 import { Calendar, User, Mail, Phone, Stethoscope, UserIcon } from 'lucide-react' // Renamed User to UserIcon to avoid conflict
+import api from '@/lib/api'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface TimeSlot {
   time: string
@@ -26,6 +27,7 @@ interface EnhancedAppointmentDialogProps {
 
 export function EnhancedAppointmentDialog({ open, onOpenChange }: EnhancedAppointmentDialogProps) {
   const dispatch = useDispatch()
+  const queryClient = useQueryClient()
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
@@ -86,41 +88,50 @@ export function EnhancedAppointmentDialog({ open, onOpenChange }: EnhancedAppoin
     setCurrentStep(1)
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateStep2()) return
 
-    const appointmentData = {
-      patientName: formData.patientName,
-      email: formData.email,
-      phone: formData.phone,
-      serviceName: formData.serviceName,
-      date: selectedDate!.toISOString().split('T')[0],
-      time: selectedSlot!.time,
-      doctor: formData.doctor, // Use doctor from form data
-      notes: formData.notes
+    try {
+      // Compose ISO datetime from selectedDate and selectedSlot.time (HH:mm)
+      const [h, m] = selectedSlot!.time.split(':').map(Number)
+      const apptDate = new Date(selectedDate!)
+      apptDate.setHours(h, m, 0, 0)
+
+      await api.post('/api/v1/admin/appointments', {
+        appointment_date: apptDate.toISOString(),
+        duration_minutes: 45,
+        name: formData.patientName,
+        email: formData.email,
+        preferred_channel: 'email',
+        service_name: formData.serviceName,
+        notes: formData.notes || undefined,
+      })
+
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'appointments'] })
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'appointments', 'today'] })
+
+      toast.success('Appointment booked successfully!', {
+        description: `${formData.patientName}'s appointment is scheduled for ${selectedDate!.toLocaleDateString()} at ${selectedSlot!.time} with ${formData.doctor}`,
+        duration: 5000,
+      })
+
+      // Reset form
+      setFormData({
+        patientName: '',
+        email: '',
+        phone: '',
+        serviceName: '',
+        doctor: '',
+        notes: ''
+      })
+      setSelectedDate(undefined)
+      setSelectedSlot(null)
+      setCurrentStep(1)
+      setErrors({})
+      onOpenChange(false)
+    } catch (e) {
+      toast.error('Failed to create appointment', { description: 'Please try again.' })
     }
-
-    dispatch(addAppointment(appointmentData))
-    
-    toast.success('Appointment booked successfully!', {
-      description: `${formData.patientName}'s appointment is scheduled for ${selectedDate!.toLocaleDateString()} at ${selectedSlot!.time} with ${formData.doctor}`,
-      duration: 5000,
-    })
-
-    // Reset form
-    setFormData({
-      patientName: '',
-      email: '',
-      phone: '',
-      serviceName: '',
-      doctor: '',
-      notes: ''
-    })
-    setSelectedDate(undefined)
-    setSelectedSlot(null)
-    setCurrentStep(1)
-    setErrors({})
-    onOpenChange(false)
   }
 
   const handleClose = () => {

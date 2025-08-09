@@ -13,12 +13,36 @@ import { toggleAppointmentComplete, deleteAppointment } from '@/lib/slices/appoi
 import { toast } from 'sonner'
 import { ConfirmationDialog } from './confirmation-dialog'
 import { FollowUpDialog } from './follow-up-dialog'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
 
 export function TodaysSchedule() {
   const dispatch = useDispatch()
-  const appointments = useSelector((state: RootState) => state.appointments.appointments)
-  const today = new Date().toISOString().split('T')[0]
-  const todaysAppointments = appointments.filter(apt => apt.date === today)
+  const queryClient = useQueryClient()
+  const { data } = useQuery({
+    queryKey: ['admin', 'appointments', 'today'],
+    queryFn: async () => {
+      const start = new Date()
+      start.setHours(0, 0, 0, 0)
+      const end = new Date()
+      end.setHours(23, 59, 59, 999)
+      const res = await api.get('/api/v1/admin/appointments', {
+        params: { start_date: start.toISOString(), end_date: end.toISOString() },
+      })
+      return res.data as { appointments: { appointment_id: string; patient_name: string; appointment_date: string; service_name: string; status: string }[] }
+    },
+  })
+  const todaysAppointments = (data?.appointments ?? []).map((a) => ({
+    id: a.appointment_id,
+    patientName: a.patient_name,
+    date: a.appointment_date?.split('T')[0] ?? '',
+    time: a.appointment_date ? new Date(a.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+    email: '',
+    phone: '',
+    doctor: '',
+    serviceName: a.service_name,
+    completed: a.status === 'completed',
+  }))
 
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [appointmentToDelete, setAppointmentToDelete] = useState<{ id: string; patientName: string } | null>(null)
@@ -33,15 +57,15 @@ export function TodaysSchedule() {
 
   const handleFollowUpDecision = (requiresFollowUp: boolean, followUpDate?: Date) => {
     if (appointmentForFollowUp) {
-      const payload: { id: string; followUpDate?: string | null } = { id: appointmentForFollowUp.id };
-
-      if (!appointmentForFollowUp.completed && requiresFollowUp && followUpDate) {
-        payload.followUpDate = followUpDate.toISOString().split('T')[0];
-      } else if (appointmentForFollowUp.completed) {
-        payload.followUpDate = null; // Clear follow-up date if reopening
+      const complete = async () => {
+        const body = !appointmentForFollowUp.completed && requiresFollowUp && followUpDate
+          ? { next_follow_up_date: followUpDate.toISOString() }
+          : { next_follow_up_date: null }
+        await api.post(`/api/v1/admin/appointments/${appointmentForFollowUp.id}/complete`, body)
+        await queryClient.invalidateQueries({ queryKey: ['admin', 'appointments'] })
+        await queryClient.invalidateQueries({ queryKey: ['admin', 'appointments', 'today'] })
       }
-
-      dispatch(toggleAppointmentComplete(payload));
+      complete().catch(() => {})
       
       if (appointmentForFollowUp.completed) { // If reopening
         toast.success('Appointment reopened!', {
@@ -73,7 +97,12 @@ export function TodaysSchedule() {
 
   const confirmDelete = () => {
     if (appointmentToDelete) {
-      dispatch(deleteAppointment(appointmentToDelete.id))
+      const del = async () => {
+        await api.delete(`/api/v1/admin/appointments/${appointmentToDelete.id}`)
+        await queryClient.invalidateQueries({ queryKey: ['admin', 'appointments'] })
+        await queryClient.invalidateQueries({ queryKey: ['admin', 'appointments', 'today'] })
+      }
+      del().catch(() => {})
       toast.success(`${appointmentToDelete.patientName}'s appointment has been deleted.`, {
         duration: 3000,
       })

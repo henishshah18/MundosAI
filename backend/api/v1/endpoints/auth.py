@@ -5,8 +5,8 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.schemas.auth import Token, UserDisplay
-from app.services.security import (
+from backend.schemas.auth import Token, UserDisplay
+from backend.services.security import (
     create_access_token,
     get_current_user,
     get_user_by_email,

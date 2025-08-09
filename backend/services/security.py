@@ -9,9 +9,10 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import EmailStr
 
-from app.core.config import settings
-from app.db.database import get_database
-from app.models.role import Role
+from backend.core.config import settings
+from backend.db.database import get_database
+from backend.repositories.base import BaseRepository
+from backend.models.role import Role
 
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -36,7 +37,8 @@ def create_access_token(subject: dict, expires_delta: Optional[timedelta] = None
 
 async def get_user_by_email(email: str) -> Optional[Role]:
     db = await get_database()
-    doc = await db["role"].find_one({"email": str(email)})
+    repo = BaseRepository(db)
+    doc = await repo.find_one("roles", {"email": str(email)})
     if not doc:
         return None
     return Role(**doc)
@@ -64,12 +66,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Role:
 
 async def create_initial_admin_if_missing(name: str, email: EmailStr, role: str, password: str) -> Role:
     db = await get_database()
-    existing = await db["role"].find_one({"email": str(email)})
+    repo = BaseRepository(db)
+    existing = await repo.find_one("roles", {"email": str(email)})
     if existing:
         return Role(**existing)
     hashed = get_password_hash(password)
     doc = {"name": name, "email": str(email), "role": role, "hashed_password": hashed}
-    result = await db["role"].insert_one(doc)
-    doc.update({"_id": result.inserted_id})
+    inserted_id = await repo.insert_one("roles", doc)
+    doc.update({"_id": inserted_id})
     return Role(**doc)
 

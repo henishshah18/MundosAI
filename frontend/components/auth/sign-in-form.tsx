@@ -9,31 +9,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { login } from '@/lib/slices/authSlice'
 import { toast } from 'sonner'
+import api from '@/lib/api'
 
-// Mock user database
-const mockUsers = [
-  {
-    email: 'admin@example.com',
-    password: 'password',
-    name: 'Dr. Admin',
-    role: 'admin',
-    clinicName: 'Main Medical Center'
-  },
-  {
-    email: 'doctor@example.com',
-    password: 'password',
-    name: 'Dr. Smith',
-    role: 'doctor',
-    clinicName: 'Family Practice'
-  },
-  {
-    email: 'nurse@example.com',
-    password: 'password',
-    name: 'Nurse Johnson',
-    role: 'nurse',
-    clinicName: 'Community Health'
-  }
-]
+// Backend-authenticated sign-in
 
 export function SignInForm() {
   const [email, setEmail] = useState('')
@@ -46,31 +24,36 @@ export function SignInForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
-    // Simulate API call delay
-    setTimeout(() => {
-      // Check against mock users
-      const user = mockUsers.find(u => u.email === email && u.password === password)
-      
-      if (user) {
-        dispatch(login({ 
-          email: user.email, 
+    try {
+      const body = new URLSearchParams()
+      body.append('username', email)
+      body.append('password', password)
+      const { data } = await api.post('/api/v1/auth/login', body, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      })
+      const token: string | undefined = data?.access_token
+      if (!token) {
+        throw new Error('No token received')
+      }
+      localStorage.setItem('authToken', token)
+      // Fetch user profile
+      const me = await api.get('/api/v1/users/me')
+      const user = me.data
+      dispatch(
+        login({
+          email: user.email,
           name: user.name,
           role: user.role,
-          clinicName: user.clinicName
-        }))
-        toast.success('Welcome back!', {
-          description: 'You have successfully signed in.',
+          clinicName: user.clinicName ?? 'Clinic',
         })
-        router.push('/dashboard')
-      } else {
-        toast.error('Invalid credentials', {
-          description: 'Please check your email and password.',
-        })
-      }
-      
+      )
+      toast.success('Welcome back!', { description: 'You have successfully signed in.' })
+      router.push('/dashboard')
+    } catch (err: any) {
+      toast.error('Invalid credentials', { description: 'Please check your email and password.' })
+    } finally {
       setIsLoading(false)
-    }, 800)
+    }
   }
 
   return (
@@ -110,13 +93,11 @@ export function SignInForm() {
             </Button>
           </div>
           
-          {/* Demo credentials helper */}
+          {/* Demo credentials helper (optional) */}
           <div className="bg-blue-50 p-4 rounded-lg text-sm border border-blue-200">
             <p className="font-medium text-blue-800 mb-2">Demo Credentials:</p>
             <div className="text-blue-700 space-y-1">
               <p>• admin@example.com / password</p>
-              <p>• doctor@example.com / password</p>
-              <p>• nurse@example.com / password</p>
             </div>
           </div>
         </CardContent>

@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, BackgroundTasks
 
-from app.services.email_processor import process_gmail_webhook
+from backend.services.email_processor import process_gmail_webhook
 
 
 router = APIRouter(tags=["webhooks"])

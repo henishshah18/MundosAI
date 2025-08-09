@@ -10,42 +10,66 @@ import { Trash2, Phone, Mail, Clock, User, Calendar } from 'lucide-react'
 import { RootState } from '@/lib/store'
 import { toggleAppointmentComplete, deleteAppointment } from '@/lib/slices/appointmentSlice'
 import { toast } from 'sonner'
+import { useQuery } from '@tanstack/react-query'
+import api from '@/lib/api'
+import { useQueryClient } from '@tanstack/react-query'
 
 export default function AllAppointments() {
 const dispatch = useDispatch()
-const appointments = useSelector((state: RootState) => state.appointments.appointments)
+const queryClient = useQueryClient()
+const { data } = useQuery({
+  queryKey: ['admin', 'appointments'],
+  queryFn: async () => {
+    const res = await api.get('/api/v1/admin/appointments')
+    return res.data as { appointments: { appointment_id: string; patient_name: string; appointment_date: string; service_name: string; status: string }[] }
+  },
+})
+const appointments = (data?.appointments ?? []).map((a) => ({
+  id: a.appointment_id,
+  patientName: a.patient_name,
+  email: '',
+  phone: '',
+  serviceName: a.service_name,
+  date: a.appointment_date?.split('T')[0] ?? '',
+  time: a.appointment_date ? new Date(a.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+  doctor: '',
+  completed: a.status === 'completed',
+}))
 
 const handleToggleComplete = (id: string) => {
-const appointment = appointments.find(apt => apt.id === id)
-if (appointment) {
-  dispatch(toggleAppointmentComplete(id))
-  toast.success(
-    appointment.completed ? 'Appointment reopened' : 'Appointment completed!',
-    {
-      description: `${appointment.patientName}'s appointment status updated.`,
-      duration: 3000,
+  const appointment = appointments.find(apt => apt.id === id)
+  if (appointment) {
+    const run = async () => {
+      await api.post(`/api/v1/admin/appointments/${id}/complete`, { next_follow_up_date: null })
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'appointments'] })
     }
-  )
-}
+    run().catch(() => {})
+    toast.success(
+      appointment.completed ? 'Appointment reopened' : 'Appointment completed!',
+      {
+        description: `${appointment.patientName}'s appointment status updated.`,
+        duration: 3000,
+      }
+    )
+  }
 }
 
 const handleDelete = (id: string) => {
-const appointment = appointments.find(apt => apt.id === id)
-if (appointment) {
-  toast.promise(
-    new Promise((resolve) => {
-      setTimeout(() => {
-        dispatch(deleteAppointment(id))
-        resolve(appointment)
-      }, 500)
-    }),
-    {
-      loading: 'Deleting appointment...',
-      success: (data: any) => `${data.patientName}'s appointment has been deleted`,
-      error: 'Failed to delete appointment',
-    }
-  )
-}
+  const appointment = appointments.find(apt => apt.id === id)
+  if (appointment) {
+    toast.promise(
+      (async () => {
+        await api.delete(`/api/v1/admin/appointments/${id}`)
+        await queryClient.invalidateQueries({ queryKey: ['admin', 'appointments'] })
+        return appointment
+      })(),
+      {
+        loading: 'Deleting appointment...',
+        success: (data: any) => `${data.patientName}'s appointment has been deleted`,
+        error: 'Failed to delete appointment',
+      }
+    )
+  }
 }
 
 const handleReschedule = (id: string) => {

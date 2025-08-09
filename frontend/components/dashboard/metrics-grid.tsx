@@ -4,9 +4,27 @@ import { useSelector } from 'react-redux'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RootState } from '@/lib/store'
 import { TrendingUp, TrendingDown, Activity, Phone, Users, AlertTriangle, CheckCircle } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import api from '@/lib/api'
 
 export function MetricsGrid() {
-  const metrics = useSelector((state: RootState) => state.dashboard.metrics)
+  const fallback = useSelector((state: RootState) => state.dashboard.metrics)
+  const { data } = useQuery({
+    queryKey: ['admin', 'dashboard-stats'],
+    queryFn: async () => (await api.get('/api/v1/admin/dashboard-stats')).data as {
+      kpis: { appointments_booked_month: number; handoffs_requiring_action: number; active_recovery_campaigns: number }
+      conversion_rates: { recovery_rate_percent: number; recall_rate_percent: number }
+    },
+  })
+  const metrics = {
+    activeRecoveryCampaigns: data?.kpis.active_recovery_campaigns ?? fallback.activeRecoveryCampaigns,
+    activeRecallCampaigns: fallback.activeRecallCampaigns,
+    engagedLeads: fallback.engagedLeads,
+    humanHandoffQueue: data?.kpis.handoffs_requiring_action ?? fallback.humanHandoffQueue,
+    recoveries: fallback.recoveries,
+    recoveryRate: data?.conversion_rates.recovery_rate_percent ?? fallback.recoveryRate,
+    recallRate: data?.conversion_rates.recall_rate_percent ?? fallback.recallRate,
+  }
 
   const metricCards = [
     {

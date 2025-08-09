@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth as auth_endpoints
-from app.api.v1.endpoints import public as public_endpoints
-from app.api.v1.endpoints import webhooks as webhooks_endpoints
-from app.api.v1.endpoints import admin as admin_endpoints
+from backend.api.v1.endpoints import auth as auth_endpoints
+from backend.api.v1.endpoints import public as public_endpoints
+from backend.api.v1.endpoints import webhooks as webhooks_endpoints
+from backend.api.v1.endpoints import admin as admin_endpoints
 
 
 api_router = APIRouter()

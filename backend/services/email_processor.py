@@ -4,7 +4,8 @@ import base64
 import json
 from typing import Any, Dict
 
-from app.db.database import get_database
+from backend.db.database import get_database
+from backend.repositories.base import BaseRepository, utcnow
 
 
 async def process_gmail_webhook(payload: Dict[str, Any]) -> None:
@@ -30,12 +31,24 @@ async def process_gmail_webhook(payload: Dict[str, Any]) -> None:
 
     # 3. Find campaign by channel.thread_id
     db = await get_database()
-    campaign = await db["campaigns"].find_one({"channel.thread_id": thread_id})
+    repo = BaseRepository(db)
+    campaign = await repo.find_one("campaigns", {"channel.thread_id": thread_id})
     if not campaign:
         return
 
-    # 4. Placeholder: hand off to AI agent (not implemented yet)
-    # For now we do nothing further.
+    # 4. Minimal processing: persist inbound interaction and bump status to RE_ENGAGED if appropriate
+    interaction_doc = {
+        "campaign_id": campaign["_id"],
+        "direction": "incoming",
+        "content": content,
+        "timestamp": utcnow(),
+    }
+    await repo.insert_one("interactions", interaction_doc)
+
+    # If currently ATTEMPTING_RECOVERY, mark RE_ENGAGED
+    if campaign.get("status") == "ATTEMPTING_RECOVERY":
+        await repo.update_one("campaigns", {"_id": campaign["_id"]}, {"$set": {"status": "RE_ENGAGED"}})
+
     return
 
 

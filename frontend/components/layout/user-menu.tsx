@@ -23,6 +23,9 @@ export function UserMenu({ user }: UserMenuProps) {
   const router = useRouter()
 
   const handleLogout = () => {
+    try {
+      localStorage.removeItem('authToken')
+    } catch {}
     dispatch(logout())
     toast.success('Logged out successfully', {
       description: 'You have been signed out of your account.',
